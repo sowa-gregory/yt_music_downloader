@@ -7,27 +7,28 @@ import json
 
 flask = Flask(__name__)
 
+
 class DownloadThread(threading.Thread):
-    def __init__(self, queue, id, url):
+    def __init__(self, queue, song_id, url):
         super(DownloadThread, self).__init__()
         self.stopRequest = threading.Event()
         self.queue = queue
-        self.id = id
+        self.song_id = song_id
         self.url = url
 
     def run(self):
         counter = 1
         while(not self.stopRequest.is_set()):
-            data = {"id":self.id, "data": {"url": self.url, "counter": counter}}
+            data = {"thread_id": threading.get_ident(), "song_id": self.song_id, "data": {
+                "url": self.url, "counter": counter}}
             self.queue.put(data)
             counter = counter+1
             time.sleep(0.1)
-
         print("download thread exit")
 
     def stop(self):
         self.stopRequest.set()
-        self.join()
+        
 
 
 class DownloadManager(threading.Thread):
@@ -35,26 +36,26 @@ class DownloadManager(threading.Thread):
         super(DownloadManager, self).__init__()
         self.stopRequest = threading.Event()
         self.queue = queue.Queue()
-        self.threads = []
-        self.download_status={}
+        self.threads = {}
+        self.download_status = {}
         self.locker = threading.Lock()
         self.start()
 
     def run(self):
         thr = DownloadThread(self.queue, "1234", "asdfasdfasf")
-        self.threads.append(thr)
         thr.start()
+        self.threads[thr.ident] = thr
 
         time.sleep(0.5)
         thr = DownloadThread(self.queue, "9877", "blekota")
-        self.threads.append(thr)
         thr.start()
+        self.threads[thr.ident] = thr
 
         while(not self.stopRequest.is_set()):
             try:
                 data = self.queue.get(timeout=1)
                 with self.locker:
-                    self.download_status[data['id']]=data['data']
+                    self.download_status[data['song_id']] = data['data']
             except queue.Empty:
                 pass
         print("manager thread exit")
@@ -64,17 +65,26 @@ class DownloadManager(threading.Thread):
             status = self.download_status.copy()
         return status
 
-    def stop(self):
-        try:
-            for thr in self.threads:
-                thr.stop()
-            for thr in self.threads:
-                thr.join()
-            self.stopRequest.set()
-            self.join()
-        except KeyboardInterrupt:
-            pass
+    def trystop(self):
+        for id in self.threads.keys():
+            self.threads[id].stop()
+        for id in self.threads.keys():
+            if(not self.threads[id].isAlive()):
+                self.threads[id].join()
 
+        self.stopRequest.set()
+        self.join(1)
+        print(self.isAlive())
+
+    def stop(self):
+        stopped = False
+        while(not stopped):
+            try:
+                self.trystop()
+                stopped = True
+            except KeyboardInterrupt:
+                pass
+       
 
 # Queue of files is stored in separate files with name:
 # - URL.to_download - files queued to be downloaded (both not started yet and partially downloaded)
@@ -103,7 +113,6 @@ def addUrl(url):
 # Queue is then distributed across download threads (actually only one thread is used)
 
 
-
 def on_download(progress):
     print(progress)
     print(progress['status'])
@@ -121,9 +130,11 @@ def download_test():
 
 downloader = DownloadManager()
 
+
 @flask.route('/')
 def hello():
     return json.dumps(downloader.getStatus())
+
 
 if __name__ == '__main__':
 
@@ -133,4 +144,5 @@ if __name__ == '__main__':
         pass
     finally:
         downloader.stop()
-    
+
+    print("main thread exit")
