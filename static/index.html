@@ -133,7 +133,7 @@
         let status_tbody = $("#status_tbody");
 
         getStatus_inProgress = true;
-        let response = await axios.get("http://localhost/status");
+        let response = await axios.get("/status");
         getStatus_inProgress = false;
         status_tbody.empty();
         for (let key in response.data) {

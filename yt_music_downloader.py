@@ -10,7 +10,7 @@ flask = Flask(__name__, static_url_path='/static')
 
 
 class Config(object):
-    _downloadPath = ""
+    _downloadPath = None
 
     @staticmethod
     def getDownloadPath():
@@ -18,6 +18,8 @@ class Config(object):
 
     @staticmethod
     def setDownloadPath(path):
+        if( not os.path.isdir(path)):
+            raise Exception( "invalid download path")
         Config._downloadPath = path
 
 
@@ -29,7 +31,7 @@ class DownloadThread(threading.Thread):
 
     def _fileNameToTitle(self, fileName):
         # remove directory prefix from filename
-        title = fileName.partition("\\")[2]
+        title = fileName.partition(os.sep)[2]
         # remove extenstion from filename
         return title[:title.rindex('.')]
 
@@ -76,8 +78,7 @@ class DownloadManager(threading.Thread):
         self.locker = threading.Lock()
         self.downloadList = []
         self.maxThreads = 2
-        # start manager
-        self.start()
+        
 
     def addSongToDownloadQueue(self, songId):
         with open(Config.getDownloadPath()+"/"+songId+".to_download", "w"):
@@ -200,14 +201,17 @@ def root():
 
 if __name__ == '__main__':
 
+    downloader = None
     try:
-        Config.setDownloadPath("download2")
+        Config.setDownloadPath("download")
         downloader = DownloadManager()
+        downloader.start()
 
         flask.run(port=80)
     except KeyboardInterrupt:
         pass
     finally:
-        downloader.stop()
+        if(downloader):
+            downloader.stop()
 
     print("main thread exit")
