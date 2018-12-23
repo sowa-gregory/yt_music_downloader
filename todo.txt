@@ -1,0 +1,5 @@
+- splitting file into separate classes
+- code refactoring
+- add scanning of pending downloads at startup in order to resume them
+- failed downloads must remove .to_download files
+

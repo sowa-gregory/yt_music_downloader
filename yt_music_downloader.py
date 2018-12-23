@@ -6,7 +6,19 @@ import time
 import json
 import os
 
-flask = Flask(__name__)
+flask = Flask(__name__, static_url_path='/static')
+
+
+class Config(object):
+    _downloadPath = ""
+
+    @staticmethod
+    def getDownloadPath():
+        return Config._downloadPath
+
+    @staticmethod
+    def setDownloadPath(path):
+        Config._downloadPath = path
 
 
 class DownloadThread(threading.Thread):
@@ -14,34 +26,45 @@ class DownloadThread(threading.Thread):
         super(DownloadThread, self).__init__()
         self.queue = queue
         self.song_id = song_id
-  
-    def onDownload(self, progress):
-        status = progress['status']
-        total_bytes = progress['total_bytes']
+
+    def _fileNameToTitle(self, fileName):
+        # remove directory prefix from filename
+        title = fileName.partition("\\")[2]
+        # remove extenstion from filename
+        return title[:title.rindex('.')]
+
+    def onDownload(self, download_data):
+        # status fields
+        # song_id title status percent eta
+        title = self._fileNameToTitle(download_data['filename'])
+        status = download_data['status']
 
         if(status == "finished"):
-            downloaded_bytes = total_bytes
-            eta = 0
+            eta = "-"
+            percent = "100%"
         else:
-            downloaded_bytes = progress['downloaded_bytes']
-            eta = progress['eta']
+            eta = download_data['_eta_str']
+            percent = download_data['_percent_str']
 
-        song_info = {"filename": progress['filename'], "downloaded_bytes": downloaded_bytes,
-                     "total_bytes": total_bytes, "eta": eta}
-
-        data = {
-            "status": progress['status'], "song_id": self.song_id, "data": song_info}
+        data = {self.song_id: {"title": title,
+                               "status": status, "percent": percent, "eta": eta}}
         self.queue.put(data)
 
     def run(self):
         ydl_opts = {'quiet': 'true', 'format': 'bestaudio/best',
-                    'outtmpl': 'download/%(title)s.%(ext)s',
+                    'outtmpl': Config.getDownloadPath()+'/%(title)s.%(ext)s',
                     'progress_hooks': [self.onDownload]}
-        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-            ydl.download(["https://youtu.be/"+self.song_id])
+
+        try:
+            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                ydl.download(["https://youtu.be/"+self.song_id])
+        except youtube_dl.utils.DownloadError as error:
+            data = {self.song_id: {"title": "{---}",
+                                   "status": "failed", "percent": "-", "eta": "-"}}
+            self.queue.put(data)
+
         print("download thread exit\n")
 
-  
 
 class DownloadManager(threading.Thread):
     def __init__(self):
@@ -53,16 +76,18 @@ class DownloadManager(threading.Thread):
         self.locker = threading.Lock()
         self.downloadList = []
         self.maxThreads = 2
-
         # start manager
         self.start()
 
     def addSongToDownloadQueue(self, songId):
-        with open("download/"+songId+".to_download", "w"):
+        with open(Config.getDownloadPath()+"/"+songId+".to_download", "w"):
             pass
         with self.locker:
             self.downloadList.append(songId)
-            
+        data = {songId: {"title": "{---}",
+                         "status": "waiting", "percent": "-", "eta": "-"}}
+        self.setDownloadStatus(data)
+
     def popDownloadQueue(self):
         with self.locker:
             if self.downloadList:
@@ -74,41 +99,41 @@ class DownloadManager(threading.Thread):
     def startDownload(self):
         ''' starts download of next song when list of songs is not empty and there are awaiting worker threads '''
         songId = self.popDownloadQueue()
-        if( songId != None and len(self.threads) < self.maxThreads):
-                thr = DownloadThread(self.statusQueue, songId)
-                thr.start()
-                self.threads.append(thr)
-                return True
+        if(songId != None and len(self.threads) < self.maxThreads):
+            thr = DownloadThread(self.statusQueue, songId)
+            thr.start()
+            self.threads.append(thr)
+            return True
         return False
 
     def updateThreadsStatus(self):
         ''' Updates running status of managed download threads. '''
         self.threads = [thr for thr in self.threads if thr.isAlive()]
- 
+
     def run(self):
         self.scanToDownload()
 
         while(not self.stopRequest.is_set()):
-            
             self.updateThreadsStatus()
-            print(self.threads)
             while(self.startDownload() == True):
-                print("new download")
                 pass
-
             try:
-                data = self.statusQueue.get(timeout=1)
-                if( data['status']=="finished"):
-                    os.remove( "download/"+data['song_id']+".to_download")
-                self.setDownloadStatus(data['song_id'], data['data'])
+                status = self.statusQueue.get(timeout=5)
+                songId = list(status.keys())[0]
 
+                if(status[songId]['status'] == "finished"):
+                    os.remove(Config.getDownloadPath() +
+                              "/"+songId+".to_download")
+                # move status into data
+                self.setDownloadStatus(status)
             except queue.Empty:
                 pass
-        print("manager thread exit")
 
-    def setDownloadStatus(self, songId, status):
+    def setDownloadStatus(self, status):
+        # this is the method to get first key value
+        songId = list(status.keys())[0]
         with self.locker:
-            self.downloadStatus[songId] = status
+            self.downloadStatus[songId] = status[songId]
 
     def getDownloadStatus(self):
         with self.locker:
@@ -119,7 +144,7 @@ class DownloadManager(threading.Thread):
         for thr in self.threads:
             if(not thr.isAlive()):
                 thr.join()
-                
+
         self.stopRequest.set()
         self.join(1)
 
@@ -156,18 +181,28 @@ class DownloadManager(threading.Thread):
 # Scans periodically files, looking for URL.to_download filenames. Internal queue is build based on detected files.
 # Queue is then distributed across download threads (actually only one thread is used)
 
-downloader = DownloadManager()
+
+@flask.route('/newsong/<string:song_id>')
+def newSong(song_id):
+    downloader.addSongToDownloadQueue(song_id)
+    return "ok"
+
 
 @flask.route('/status')
-def hello():
+def getStatus():
     return json.dumps(downloader.getDownloadStatus())
+
+
+@flask.route('/')
+def root():
+    return flask.send_static_file('index.html')
+
 
 if __name__ == '__main__':
 
     try:
-        time.sleep(2)
-        downloader.addSongToDownloadQueue("cJpVlFMHz1E")
-        downloader.addSongToDownloadQueue("pRpeEdMmmQ0")
+        Config.setDownloadPath("download2")
+        downloader = DownloadManager()
 
         flask.run(port=80)
     except KeyboardInterrupt:
