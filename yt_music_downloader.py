@@ -5,6 +5,7 @@ import queue
 import time
 import json
 import os
+import collections
 
 flask = Flask(__name__, static_url_path='/static')
 
@@ -31,7 +32,7 @@ class DownloadThread(threading.Thread):
 
     def _fileNameToTitle(self, fileName):
         # remove directory prefix from filename
-        title = fileName.partition(os.sep)[2]
+        title = fileName[fileName.rindex(os.sep)+1:]
         # remove extenstion from filename
         return title[:title.rindex('.')]
 
@@ -74,12 +75,11 @@ class DownloadManager(threading.Thread):
         self.stopRequest = threading.Event()
         self.statusQueue = queue.Queue()
         self.threads = []
-        self.downloadStatus = {}
+        self.downloadStatus = collections.OrderedDict()
         self.locker = threading.Lock()
         self.downloadList = []
         self.maxThreads = 2
         
-
     def addSongToDownloadQueue(self, songId):
         with open(Config.getDownloadPath()+"/"+songId+".to_download", "w"):
             pass
@@ -207,7 +207,7 @@ if __name__ == '__main__':
         downloader = DownloadManager()
         downloader.start()
 
-        flask.run(port=80)
+        flask.run(host="0.0.0.0",port=8000)
     except KeyboardInterrupt:
         pass
     finally:

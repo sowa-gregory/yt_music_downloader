@@ -23,8 +23,12 @@
     <nav>
       <div class="nav-wrapper teal">
         <a href="#" class="brand-logo center">Youtube music downloader</a>
+        <i id="comm_icon" class="large material-icons" style="margin-left: 20px"
+          >sync</i
+        >
       </div>
     </nav>
+
     <p></p>
 
     <div class="container" style="width:80%">
@@ -45,17 +49,7 @@
                 <tbody id="status_tbody"></tbody>
               </table>
 
-              <div class="preloader-wrapper big active">
-                <div class="spinner-layer spinner-blue-only">
-                  <div class="circle-clipper left">
-                    <div class="circle"></div>
-                  </div>
-                  <div class="gap-patch"><div class="circle"></div></div>
-                  <div class="circle-clipper right">
-                    <div class="circle"></div>
-                  </div>
-                </div>
-              </div>
+       
             </div>
           </div>
         </div>
@@ -68,8 +62,6 @@
         >
           <i class="material-icons right">cloud_download</i>Add song
         </a>
-
-       
       </p>
     </div>
 
@@ -100,12 +92,12 @@
     <!--JavaScript at end of body for optimized loading-->
     <script>
       $(".modal").modal();
-     
-      getStatus_inProgress = false;
-      setInterval(onGetStatus, 2000);
 
-      function url2SongId(url)
-      {
+      getStatus_inProgress = false;
+      setInterval(onGetStatus, 3000);
+
+      function url2SongId(url) {
+        url=url.trim(); // remove whitespaces from url
         let regex = /^https?\:\/\/youtu\.be\/([A-Za-z0-9_\-]{11})(?:\?t=.*|$)/i;
         let found = url.match(regex);
         if (found != null) return found[1];
@@ -119,13 +111,22 @@
         let url = $("#newsong").val();
         $("#newsong").val("");
         let songId = url2SongId(url);
-        if(songId==null)
-        {
+        if (songId == null) {
           alert("invalid url");
           return;
         }
         // convert val to song identifier
-        let response = await axios.get("/newsong/" + songId);
+        try {
+          let response = await axios.get("/newsong/" + songId);
+          onGetStatus();
+        } catch (error) {}
+      }
+
+      function setCommunicationStatus(connected) {
+        let icon = $("#comm_icon");
+        icon.empty();
+        if (connected) icon.append("sync");
+        else icon.append("sync_problem");
       }
 
       async function onGetStatus() {
@@ -133,23 +134,26 @@
         let status_tbody = $("#status_tbody");
 
         getStatus_inProgress = true;
-        let response = await axios.get("/status");
-        getStatus_inProgress = false;
-        status_tbody.empty();
-        for (let key in response.data) {
-          let song = response.data[key];
-
-          html = "<tr><td>";
-          html = html + "https://youtu.be/" + key;
-          html = html + "</td>";
-          html = html + "<td>" + song.title + "</td>";
-          html = html + "<td>" + song.status + "</td>";
-          html = html + "<td>" + song.percent + "</td>";
-          html = html + "<td>" + song.eta + "</td>";
-          
-
-          html = html + "</tr>";
-          status_tbody.append(html);
+        try {
+          let response = await axios.get("/status");
+          setCommunicationStatus(true);
+          status_tbody.empty();
+          for (let key in response.data) {
+            let song = response.data[key];
+            html = "<tr><td>";
+            html = html + "https://youtu.be/" + key;
+            html = html + "</td>";
+            html = html + "<td>" + song.title + "</td>";
+            html = html + "<td>" + song.status + "</td>";
+            html = html + "<td>" + song.percent + "</td>";
+            html = html + "<td>" + song.eta + "</td>";
+            html = html + "</tr>";
+            status_tbody.append(html);
+          }
+        } catch (error) {
+          setCommunicationStatus(false);
+        } finally {
+          getStatus_inProgress = false;
         }
       }
     </script>
