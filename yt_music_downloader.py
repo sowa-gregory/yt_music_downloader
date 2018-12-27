@@ -6,6 +6,7 @@ import time
 import json
 import os
 import collections
+import logging
 
 flask = Flask(__name__, static_url_path='/static')
 
@@ -138,9 +139,8 @@ class DownloadManager(threading.Thread):
 
     def getDownloadStatus(self):
         with self.locker:
-            status = self.downloadStatus.copy()
-        return status
-
+             return self.downloadStatus.copy()            
+ 
     def trystop(self):
         for thr in self.threads:
             if(not thr.isAlive()):
@@ -206,6 +206,10 @@ if __name__ == '__main__':
         Config.setDownloadPath("download")
         downloader = DownloadManager()
         downloader.start()
+
+        log = logging.getLogger('werkzeug')
+        log.disabled = True
+        flask.logger.disabled = True
 
         flask.run(host="0.0.0.0",port=8000)
     except KeyboardInterrupt:
