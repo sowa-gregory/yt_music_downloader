@@ -47,4 +47,5 @@ Front side of the solution is build in form of single page application. Web page
 
 ## Version history
 
-2018-12-24 - initial functional release v1.0
+- 2018-12-24 - v1.0.0 - initial functional release v1.0
+- 2018-12-27 - v1.0.1 - frontend utilizes vue framework, song statuses of finished downloads removed (not send any longer to frontend) after defined number of seconds

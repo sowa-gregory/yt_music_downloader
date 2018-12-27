@@ -13,6 +13,7 @@ flask = Flask(__name__, static_url_path='/static')
 
 class Config(object):
     _downloadPath = None
+    _removeTimeout = 30
 
     @staticmethod
     def getDownloadPath():
@@ -20,9 +21,17 @@ class Config(object):
 
     @staticmethod
     def setDownloadPath(path):
-        if( not os.path.isdir(path)):
-            raise Exception( "invalid download path")
+        if(not os.path.isdir(path)):
+            raise Exception("invalid download path")
         Config._downloadPath = path
+
+    @staticmethod
+    def setRemoveTimeout(seconds):
+        Config._removeTimeout = seconds
+
+    @staticmethod
+    def getRemoveTimeout():
+        return Config._removeTimeout
 
 
 class DownloadThread(threading.Thread):
@@ -80,7 +89,7 @@ class DownloadManager(threading.Thread):
         self.locker = threading.Lock()
         self.downloadList = []
         self.maxThreads = 2
-        
+
     def addSongToDownloadQueue(self, songId):
         with open(Config.getDownloadPath()+"/"+songId+".to_download", "w"):
             pass
@@ -112,11 +121,21 @@ class DownloadManager(threading.Thread):
         ''' Updates running status of managed download threads. '''
         self.threads = [thr for thr in self.threads if thr.isAlive()]
 
+    def checkOutdatedStatuses(self):
+        currentTime = time.time()
+        removeTimeout = Config.getRemoveTimeout()
+        for key in list(self.downloadStatus.keys()):
+            currentStatus = self.downloadStatus[key]
+            if(currentStatus['status'] == 'finished' and currentTime-currentStatus['update_time'] > removeTimeout):
+                print("status remove")
+                del self.downloadStatus[key]
+
     def run(self):
         self.scanToDownload()
 
         while(not self.stopRequest.is_set()):
             self.updateThreadsStatus()
+            self.checkOutdatedStatuses()
             while(self.startDownload() == True):
                 pass
             try:
@@ -135,12 +154,14 @@ class DownloadManager(threading.Thread):
         # this is the method to get first key value
         songId = list(status.keys())[0]
         with self.locker:
-            self.downloadStatus[songId] = status[songId]
+            tempStatus = status[songId]
+            tempStatus["update_time"] = time.time()
+            self.downloadStatus[songId] = tempStatus
 
     def getDownloadStatus(self):
         with self.locker:
-             return self.downloadStatus.copy()            
- 
+            return self.downloadStatus.copy()
+
     def trystop(self):
         for thr in self.threads:
             if(not thr.isAlive()):
@@ -204,14 +225,16 @@ if __name__ == '__main__':
     downloader = None
     try:
         Config.setDownloadPath("download")
+        Config.setRemoveTimeout(300)
         downloader = DownloadManager()
         downloader.start()
 
+        # flask uses strange logger name - werkzeug
         log = logging.getLogger('werkzeug')
         log.disabled = True
         flask.logger.disabled = True
 
-        flask.run(host="0.0.0.0",port=8000)
+        flask.run(host="0.0.0.0", port=8000)
     except KeyboardInterrupt:
         pass
     finally:
