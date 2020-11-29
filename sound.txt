@@ -5,3 +5,10 @@ uncomment entries in /boot/config.txt
 hdmi_drive = 2
 hdmi_force_hotplug =1
 
+# add audio group
+
+user mpd must belong to group "audio"
+audio needs to be primary group set for mpd user - group in mpd.conf should be set to audio
+
+
+
