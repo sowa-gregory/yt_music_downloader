@@ -1,0 +1,7 @@
+#force hdmi output
+
+uncomment entries in /boot/config.txt
+
+hdmi_drive = 2
+hdmi_force_hotplug =1
+
