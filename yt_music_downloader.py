@@ -10,7 +10,6 @@ import logging
 
 flask = Flask(__name__, static_url_path='/static')
 
-
 class Config(object):
     _downloadPath = None
     _removeTimeout = 30
@@ -119,7 +118,7 @@ class DownloadManager(threading.Thread):
 
     def updateThreadsStatus(self):
         ''' Updates running status of managed download threads. '''
-        self.threads = [thr for thr in self.threads if thr.isAlive()]
+        self.threads = [thr for thr in self.threads if thr.is_alive()]
 
     def checkOutdatedStatuses(self):
         currentTime = time.time()
@@ -164,7 +163,7 @@ class DownloadManager(threading.Thread):
 
     def trystop(self):
         for thr in self.threads:
-            if(not thr.isAlive()):
+            if(not thr.is_alive()):
                 thr.join()
 
         self.stopRequest.set()
@@ -224,7 +223,7 @@ if __name__ == '__main__':
 
     downloader = None
     try:
-        Config.setDownloadPath("download")
+        Config.setDownloadPath("/music")
         Config.setRemoveTimeout(300)
         downloader = DownloadManager()
         downloader.start()
@@ -234,7 +233,7 @@ if __name__ == '__main__':
         log.disabled = True
         flask.logger.disabled = True
 
-        flask.run(host="0.0.0.0", port=8000)
+        flask.run(host="0.0.0.0", port=80)
     except KeyboardInterrupt:
         pass
     finally:
