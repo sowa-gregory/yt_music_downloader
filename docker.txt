@@ -1,2 +1,2 @@
-docker run -it balenalib/raspberry-pi-alpine-python:3.9 /bin/bash
+docker run -dit -p 80:80 -v /music:/music yt
 
