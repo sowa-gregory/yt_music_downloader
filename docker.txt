@@ -1,2 +1,5 @@
-docker run -dit -p 80:80 -v /music:/music yt
+#build image
+docker build . -t sowisz/yt_music_downloader
+
+docker run -dit -p 80:80 -v /music:/music yt_music_downloader
 

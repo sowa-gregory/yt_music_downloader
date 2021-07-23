@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <!--Import Google Icon Font-->
+    <link
+      href="https://fonts.googleapis.com/icon?family=Material+Icons"
+      rel="stylesheet"
+    />
+    <!--Import materialize.css-->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css"
+    />
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+
+    <!-- vue -->
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
+    <!--Let browser know website is optimized for mobile-->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- additional styles -->
+    <style>
+      tr:nth-child(even) {
+        background-color: beige;
+      }
+    </style>
+  </head>
+
+  <body id="body" style="visibility:hidden; background-color: #e8e8e8">
+    <nav id="app">
+      <div class="nav-wrapper teal">
+        <a href="#" class="brand-logo center">Youtube music downloader</a>
+        <i
+          v-if="connectedState"
+          class="large material-icons"
+          style="margin-left: 20px"
+        >
+          sync</i
+        >
+        <i v-else class="large material-icons" style="margin-left: 20px">
+          sync_problem</i
+        >
+      </div>
+    </nav>
+
+    <p></p>
+
+    <div id="songs" class="container" style="width:80%">
+      <div class="row">
+        <div class="col s12">
+          <div class="card grey lighten-5">
+            <div class="card-content black-text">
+              <div id="component-songs-table">
+                <table v-if="Object.keys(songs).length>0">
+                  <thead>
+                    <tr>
+                      <th width="25%">URL</th>
+                      <th width="54%">Title</th>
+                      <th width="9%">Status</th>
+                      <th width="6%">Progress</th>
+                      <th width="6%">ETA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(song,key) in songs">
+                      <td>https://youtu.be/{{ key }}</td>
+                      <td>{{ song.title }}</td>
+                      <td>{{ song.status }}</td>
+                      <td>{{ song.percent }}</td>
+                      <td>{{ song.eta }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <i v-else> no pending downloads </i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p class="center-align">
+        <a
+          class="waves-effect waves-light btn-large modal-trigger"
+          href="#component-new-song"
+        >
+          <i class="material-icons right">cloud_download</i>Add song
+        </a>
+      </p>
+    </div>
+
+    <!-- Modal Structure -->
+    <div id="component-new-song" class="modal col s2" style="width: 30%">
+      <div class="modal-content">
+        <h5>Add new song to download</h5>
+        <div class="row">
+          <div class="input-field col s12">
+            <input id="newsong" type="text" class="validate" />
+            <label for="newsong">Song URL</label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <a
+          href="#!"
+          class="modal-close waves-effect waves-teal btn-flat"
+          onclick="onNewSong()"
+          >Download</a
+        >
+        <a href="#!" class="modal-close waves-effect waves-teal btn-flat"
+          >Cancel</a
+        >
+      </div>
+    </div>
+    <!--JavaScript at end of body for optimized loading-->
+    <script>
+      $(".modal").modal();
+
+      // --- vue
+      var vm = new Vue({
+        el: "#app",
+        data: {
+          connectedState: false
+        }
+      });
+
+      var vm_songs_table = new Vue({
+        el: "#component-songs-table",
+        data: {
+          ala: false,
+          getStatusInProgress: false,
+          songs: []
+        },
+        methods: {
+          OnGetStatus: async function() {
+            if (this.getStatusInProgress) return;
+            this.getStatusInProgress = true;
+            try {
+              let response = await axios.get("/status");
+              vm.connectedState = true;
+              this.songs = response.data;
+            } catch (error) {
+              vm.connectedState = false;
+            } finally {
+              this.getStatusInProgress = false;
+            }
+          }
+        },
+        mounted() {
+          this.OnGetStatus();
+          setInterval(this.OnGetStatus, 3000);
+        }
+      });
+
+      // --- vue
+      document.onreadystatechange = () => {
+        if (document.readyState == "complete") {
+          document.getElementsByTagName("BODY")[0].style.visibility = "visible";
+        }
+      };
+
+      function url2SongId(url) {
+        url = url.trim(); // remove whitespaces from url
+        let regex = /^https?\:\/\/youtu\.be\/([A-Za-z0-9_\-]{11})(?:\?t=.*|$)/i;
+        let found = url.match(regex);
+        if (found != null) return found[1];
+        regex = /^https?\:\/\/(?:www.)?youtube.com\/watch\?v=([A-Za-z0-9_\-]{11})(?:&.*|$)/i;
+        found = url.match(regex);
+        if (found != null) return found[1];
+        return null;
+      }
+
+      async function onNewSong() {
+        let url = $("#newsong").val();
+        $("#newsong").val("");
+        let songId = url2SongId(url);
+        if (songId == null) {
+          alert("invalid url");
+          return;
+        }
+        // convert val to song identifier
+        try {
+          let response = await axios.get("/newsong/" + songId);
+          onGetStatus();
+        } catch (error) {}
+      }
+    </script>
+  </body>
+</html>
